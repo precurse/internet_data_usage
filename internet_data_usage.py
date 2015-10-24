@@ -15,13 +15,13 @@ __copyright__ = "2015"
 def main():
     parser = argparse.ArgumentParser()
 
-    #carriers = ("telus_wireline","koodo_mobile")
+    carriers = ("telus_wireline","koodo_mobile")
     #items = ("usage","allotment","plan","days_left","all")
     #output = ("zabbix","terminal")
 
     parser.add_argument("username", help="Username for account access")
     parser.add_argument("-p", "--password", default=None, help="Password for account access (Optional: will prompt if required)")
-#    parser.add_argument("-c", "--carrier", default='telus', help='Carrier to query from (default=telus)', choices=carriers)
+    parser.add_argument("-c", "--carrier", default='telus_wireline', help='Carrier to query from (default=telus)', choices=carriers)
 #    parser.add_argument("-i", "--item", default='usage', help='Item to request (default=usage)', choices=items)
 #    parser.add_argument("-t", "--cache_time", default=0, type=int, help='Seconds to keep data cached (default=0)')
     parser.add_argument("-a", "--http_user_agent", default="Mozilla/5.0 (X11; Linux x86_64)")
@@ -34,7 +34,12 @@ def main():
     else:
         password = args.password
 
-    scraper = KoodoWirelessScraper(args.username, password, args.http_user_agent)
+    if args.carrier == "telus_wireline":
+        scraper = TelusWirelineScraper(args.username, password, args.http_user_agent)
+    elif args.carrier == "koodo_mobile":
+        scraper = KoodoMobileScraper(args.username, password, args.http_user_agent)
+    else:
+        sys.exit("Invalid carrier specified")
 
     scraper.go()
 
@@ -129,10 +134,10 @@ class TelusWirelineScraper(CarrierUsageScraper):
         self._usage = usage.string.strip()
 
 
-class KoodoWirelessScraper(CarrierUsageScraper):
+class KoodoMobileScraper(CarrierUsageScraper):
 
     def __init__(self, username, password, user_agent):
-        name = "KoodoWireless"
+        name = "KoodoMobile"
         description = "Koodo Wireless Services"
         url_login = "https://secure.koodomobile.com/sso/UI/Login?realm=koodo"
         url_data = "https://selfserveaccount.koodomobile.com/my-account/usage/overview/usage?INTCMP=KMNew_NavBar_Usage"
