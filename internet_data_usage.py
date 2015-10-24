@@ -15,9 +15,9 @@ __copyright__ = "2015"
 def main():
     parser = argparse.ArgumentParser()
 
-    carriers = ("telus_wireline","koodo_mobile")
-    items = ("usage","allotment","plan","days_left","all")
-    output = ("zabbix","terminal")
+    #carriers = ("telus_wireline","koodo_mobile")
+    #items = ("usage","allotment","plan","days_left","all")
+    #output = ("zabbix","terminal")
 
     parser.add_argument("username", help="Username for account access")
     parser.add_argument("-p", "--password", default=None, help="Password for account access (Optional: will prompt if required)")
@@ -34,7 +34,7 @@ def main():
     else:
         password = args.password
 
-    scraper = TelusWirelineScraper(args.username, password, args.http_user_agent)
+    scraper = KoodoWirelessScraper(args.username, password, args.http_user_agent)
 
     scraper.go()
 
@@ -127,7 +127,36 @@ class TelusWirelineScraper(CarrierUsageScraper):
     def parse(self, parse_page):
         usage = parse_page.find(class_="used")
         self._usage = usage.string.strip()
- 
+
+
+class KoodoWirelessScraper(CarrierUsageScraper):
+
+    def __init__(self, username, password, user_agent):
+        name = "KoodoWireless"
+        description = "Koodo Wireless Services"
+        url_login = "https://secure.koodomobile.com/sso/UI/Login?realm=koodo"
+        url_data = "https://selfserveaccount.koodomobile.com/my-account/usage/overview/usage?INTCMP=KMNew_NavBar_Usage"
+
+        post_data = { "goto": "aHR0cHM6Ly9pZGVudGl0eS5rb29kb21vYmlsZS5jb206NDQzL2FzL1FWVktuL3Jlc3VtZS9hcy9hdXRob3JpemF0aW9uLnBpbmc=",
+        "encoded": "true",
+        "service": "koodo",
+        "realm": "koodo",
+        "portal": "koodo",
+        "locale": "en",
+        "IDToken1": username,
+        "IDToken2": password,
+        "check1": "on",
+        "Login.Submit": "Log in"}
+
+        http_headers = {'user-agent': user_agent }
+
+        CarrierUsageScraper.__init__(self, name, description, post_data, url_login, url_data, http_headers)
+
+    def parse(self, parse_page):
+        usage = parse_page.find(class_="used")
+        self._usage = usage.string.strip()
+
+
 if __name__ == "__main__":
     sys.exit(main())
 
