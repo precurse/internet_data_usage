@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 
 import sys
+import logging
 import argparse 
 import getpass
 import requests # Handling HTTP Requests and cookies
@@ -13,6 +14,9 @@ __copyright__ = "2015"
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("main")
+
     parser = argparse.ArgumentParser()
 
     carriers = ("telus_wireline","koodo_mobile")
@@ -20,34 +24,52 @@ def main():
     #output = ("zabbix","terminal")
 
     parser.add_argument("username", help="Username for account access")
-    parser.add_argument("-p", "--password", default=None, help="Password for account access (Optional: will prompt if required)")
-    parser.add_argument("-c", "--carrier", default='telus_wireline', help='Carrier to query from (default=telus)', choices=carriers)
+    parser.add_argument("-p", "--password", default=None, \
+                        help="Password for account access (Optional: will prompt if required)")
+    parser.add_argument("-c", "--carrier", default='telus_wireline',\
+                        help='Carrier to query from (default=telus_wireline)', choices=carriers)
 #    parser.add_argument("-i", "--item", default='usage', help='Item to request (default=usage)', choices=items)
 #    parser.add_argument("-t", "--cache_time", default=0, type=int, help='Seconds to keep data cached (default=0)')
     parser.add_argument("-a", "--http_user_agent", default="Mozilla/5.0 (X11; Linux x86_64)")
+    parser.add_argument("-v", "--verbose", action="store_true", default=False)
 #    parser.add_argument("-o", "--output", default='terminal', help='Type of output (default=terminal)', choices=output)
     args = parser.parse_args()
+
+    if args.verbose > 0:
+        logging.basicConfig(level=logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
 
     # Get password if none was specified
     if args.password is None:
         password = getpass.getpass(prompt='Carrier password (will not echo): ')
+        logger.debug("Password length: {}".format(len(password)))
     else:
         password = args.password
 
+    if len(password) < 1:
+        logger.debug("Password is less than 1")
+        sys.exit("Password empty. Exiting.")
+
     if args.carrier == "telus_wireline":
+        logger.debug("Using telus_wireline carrier")
         scraper = TelusWirelineScraper(args.username, password, args.http_user_agent)
     elif args.carrier == "koodo_mobile":
+        logger.debug("Using koodo_mobile carrier")
         scraper = KoodoMobileScraper(args.username, password, args.http_user_agent)
     else:
-        sys.exit("Invalid carrier specified")
+        sys.exit("Invalid carrier {} specified".format(args.carrier))
 
+    logger.debug("Starting scraping process")
     scraper.go()
+    logger.debug("Finished scraping process")
 
-    print scraper.get_data_usage()
+    scraper.print_all()
 
 
 class CarrierUsageScraper(object):
     """
+    This class should only be inherited by another class.
+
     name = name of the carrier
     description = description of the carrier
     post_data = HTTP POST data that is passed to the url_login script. Dictionary format.
@@ -55,6 +77,7 @@ class CarrierUsageScraper(object):
 
     url_login = login script that handles the POST authentication and cookies
     url_data = web page that presents the data to parse (post-login)
+
 
     """
     def __init__(self, name,
@@ -71,7 +94,10 @@ class CarrierUsageScraper(object):
         self.url_login = url_login
         self.url_data = url_data
 
-        self._usage = None
+        self._data_usage = None
+        self._plan = None
+        self._data_usage_unit = None
+        self._data_plan_total = None
 
     def _login(self):
         # Create web session
@@ -86,7 +112,10 @@ class CarrierUsageScraper(object):
         self._logged_in = True
 
     def get_data_usage(self):
-        return self._usage
+        return self._data_usage
+
+    def get_plan(self):
+        return self._plan
 
     def _get_data_pg_html(self):
         # Returns HTML for data page
@@ -98,17 +127,27 @@ class CarrierUsageScraper(object):
 
         return page
  
-    def parse(self, parse_page):
+    def _parse(self, parse_page):
         pass
 
     def go(self):
         self._login()
         page = self._get_data_pg_html()
-        self.parse(page)
+        self._parse(page)
+
+    def print_all(self):
+        print "{} Plan: {}".format(self.name, self._plan)
+        print "Usage: {}/{} {}".format(self._data_usage, self._data_plan_total, self._data_usage_unit)
 
 
 class TelusWirelineScraper(CarrierUsageScraper):
+    """
 
+    Other meaningful data that can be pulled:
+    Billing cycle
+    Days left in cycle
+
+    """
     def __init__(self, username, password, user_agent):
         name = "TelusWireline"
         description = "Telus Wireline Services (Internet + TTV)"
@@ -129,13 +168,24 @@ class TelusWirelineScraper(CarrierUsageScraper):
 
         CarrierUsageScraper.__init__(self, name, description, post_data, url_login, url_data, http_headers)
 
-    def parse(self, parse_page):
-        usage = parse_page.find(class_="used")
-        self._usage = usage.string.strip()
-
+    def _parse(self, parse_page):
+        usage = parse_page.find(class_="used").string
+        plan = parse_page.find(class_="usage-plan-header usage-type-header").h2.string
+        self._data_usage = usage.strip()
+        self._plan = plan.strip()
+        self._data_usage_unit = parse_page.find(class_="usage-card-info").span.string.strip()[-2:]
+        self._data_plan_total = parse_page.find(class_="usage-card-info").span.string.strip()[1:-2].strip()
 
 class KoodoMobileScraper(CarrierUsageScraper):
+    """
 
+    Other meaningful data that could be pulled:
+    Messaging usage
+    Airtime usage
+    Billing Cycle
+    Days left in cycle
+
+    """
     def __init__(self, username, password, user_agent):
         name = "KoodoMobile"
         description = "Koodo Wireless Services"
@@ -157,10 +207,13 @@ class KoodoMobileScraper(CarrierUsageScraper):
 
         CarrierUsageScraper.__init__(self, name, description, post_data, url_login, url_data, http_headers)
 
-    def parse(self, parse_page):
-        usage = parse_page.find(class_="used")
-        self._usage = usage.string.strip()
-
+    def _parse(self, parse_page):
+        usage = parse_page.find(class_="used").string
+        plan = parse_page.find(class_="usage-plan-header usage-type-header").h2.string
+        self._data_usage = usage.strip()
+        self._plan = plan.strip()
+        self._data_usage_unit = parse_page.find(class_="usage-card-info").span.string.strip()[-2:]
+        self._data_plan_total = parse_page.find(class_="usage-card-info").span.string.strip()[1:-2].strip()
 
 if __name__ == "__main__":
     sys.exit(main())
