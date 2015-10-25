@@ -6,6 +6,7 @@ Currently supports the following carriers:
 - Telus Wireline
 - Koodo Mobile
 
+Additional carriers can easily be added if asked.
 
 Installation
 ------
@@ -97,7 +98,7 @@ Command line output:
 Terminal:
 
         $ ./internet_data_usage.py term -c telus_wireline user@example.com
-        Carrier password (will not echo): <password. <enter>
+        Carrier password (will not echo): <password> <enter>
         TelusWireline Plan: TELUS Internet 50
         Usage: 49/400 GB
 
