@@ -7,6 +7,23 @@ Currently supports the following carriers:
 - Koodo Mobile
 
 
+Installation
+------
+Install `internet_data_usage` from [Github](http://www.github.com) using git:
+
+    git clone https://github.com/precurse/internet_data_usage.git
+
+Install module requirements using [pip](http://www.pip-installer.org/en/latest/), a
+package manager for Python.
+
+    pip install -r requirements.txt
+
+Need pip? Try installing it by running the following from the command
+line:
+
+    $ curl https://raw.github.com/pypa/pip/master/contrib/get-pip.py | python
+
+
 Command Line Usage
 ------
 
