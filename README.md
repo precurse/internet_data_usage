@@ -10,7 +10,8 @@ Currently supports the following carriers:
 
 Output in command line mode:
 
-        $ ./internet_data_usage.py
+        $ ./internet_data_usage.py -c telus_wireline user@example.com
+        Carrier password (will not echo): <enter> 
         TelusWireline Plan: TELUS Internet 50
         Usage: 49/400 GB
 
