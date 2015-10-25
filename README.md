@@ -9,7 +9,7 @@ Currently supports the following carriers:
 - Koodo Mobile
 
 Output in command line mode:
-[precurse@laptop internet_data_usage]$ python2 internet_data_usage.py 
-TelusWireline Plan: TELUS Internet 50
-Usage: 49/400 GB
+        [precurse@laptop internet_data_usage]$ python2 internet_data_usage.py
+        TelusWireline Plan: TELUS Internet 50
+        Usage: 49/400 GB
 
