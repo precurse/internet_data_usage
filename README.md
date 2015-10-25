@@ -78,12 +78,14 @@ Command line output:
 ------
 
 Terminal:
+
         $ ./internet_data_usage.py term -c telus_wireline user@example.com
         Carrier password (will not echo): <password. <enter>
         TelusWireline Plan: TELUS Internet 50
         Usage: 49/400 GB
 
 Zabbix:
+
         $ ./internet_data_usage.py zabbix -i data_usage user@example.com password
         49
 
