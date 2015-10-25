@@ -10,7 +10,7 @@ Currently supports the following carriers:
 Command Line Usage
 ------
 
-        [piranha@laptop internet_data_usage]$ ./internet_data_usage.py -h
+        $ ./internet_data_usage.py -h
         usage: internet_data_usage.py [-h] [-p PASSWORD]
                                       [-c {telus_wireline,koodo_mobile}]
                                       [-a HTTP_USER_AGENT] [-v]
