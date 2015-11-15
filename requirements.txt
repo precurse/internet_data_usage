@@ -1,3 +1,3 @@
 requests>=2.8.1
-ZabbixSender>=0.1.7
 beautifulsoup4>=4.4.1
+influxdb>=2.10.0

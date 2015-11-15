@@ -6,7 +6,7 @@ Currently supports the following carriers:
 - Telus Wireline
 - Koodo Mobile
 
-Additional carriers can easily be added if asked.
+Additional carriers can easily be added if requested.
 
 Installation
 ------
@@ -92,6 +92,34 @@ Zabbix/Monitoring Usage
           -v, --verbose
 
 
+Influxdb Usage
+------
+
+        $ ./internet_data_usage.py influxdb -h
+        usage: internet_data_usage.py influxdb [-h] [-p PORT]
+                                               [-c {telus_wireline,koodo_mobile}]
+                                               [-a HTTP_USER_AGENT] [-v]
+                                               username password i_user i_pass i_host
+                                               i_db
+
+        positional arguments:
+          username              Username for account access
+          password              Carrier password for account access
+          i_user                Influxdb username
+          i_pass                Influxdb password
+          i_host                Influxdb hostname
+          i_db                  Influxdb database
+
+        optional arguments:
+          -h, --help            show this help message and exit
+          -p PORT, --port PORT  Port for influxdb access (default=8086)
+          -c {telus_wireline,koodo_mobile}, --carrier {telus_wireline,koodo_mobile}
+                                Carrier to query from (default=telus_wireline)
+          -a HTTP_USER_AGENT, --http_user_agent HTTP_USER_AGENT
+                                Defaults to 'Mozilla/5.0 (X11; Linux x86_64)'
+          -v, --verbose
+
+
 Command line output:
 ------
 
@@ -106,4 +134,8 @@ Zabbix:
 
         $ ./internet_data_usage.py zabbix -i data_usage user@example.com password
         49
+
+Influxdb:
+
+        $ ./internet_data_usage.py influxdb user@example.com mypass root root localhost internet_usage
 

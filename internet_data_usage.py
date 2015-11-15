@@ -5,14 +5,18 @@ import logging
 import argparse
 import re
 import getpass
+
 import requests # Handling HTTP Requests and cookies
 from bs4 import BeautifulSoup
-from ZabbixSender import ZabbixSender, ZabbixPacket
-import json
+from influxdb import client as influxdb
+
 """
     TODO:
+        - Confirm login was successful
+        - Setup zabbix_send functionality
         - Add cookie save/resume (Most time is spent authorizing)
         - Implement Caching (would help with Zabbix)
+        - Add "Days Remaining" in cycle to carrier pulls
 
 """
 
@@ -25,7 +29,7 @@ DEFAULT_USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64)"
 
 
 def main():
-    #logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig()
     logger = logging.getLogger(__name__)
 
     # Top level parsers
@@ -36,6 +40,7 @@ def main():
 
     add_term_command(subparsers)
     add_zabbix_command(subparsers)
+    add_influxdb_command(subparsers)
 
     args = main_parser.parse_args()
 
@@ -51,10 +56,15 @@ def setup_logging(verbosity):
 
 
 def get_carrier_items():
-    # Mapping for object variables
-    carrier_items = {"data_usage" : "_data_usage",
-                     "data_plan_total" : "_data_plan_total",
-                     "data_use_unit" : "_data_usage_unit",
+    """
+        Mapping for object variables
+
+        Key = Item to query from command line
+        Val = CarrierUsageScraper variables
+    """
+    carrier_items = {"data_usage": "_data_usage",
+                     "data_plan_total": "_data_plan_total",
+                     "data_use_unit": "_data_usage_unit",
                      "plan": "_plan",
                      #"days_remaining" : "_days_remaining"
                      }
@@ -64,55 +74,104 @@ def get_carrier_items():
 
 def get_carriers():
     # Dictionary to map carriers to their objects to use
-    carriers_dict = {"telus_wireline" : TelusWirelineScraper,
-                     "koodo_mobile" : KoodoMobileScraper}
+    carriers_dict = {"telus_wireline": TelusWirelineScraper,
+                     "koodo_mobile": KoodoMobileScraper}
 
     return carriers_dict
+
+
+def add_influxdb_command(subparsers):
+
+    parser = subparsers.add_parser("influxdb", help="all output will be sent to an influxdb database")
+    parser.add_argument("username", help="Username for account access")
+    parser.add_argument("password", help="Carrier password for account access")
+    parser.add_argument("i_user", help="Influxdb username")
+    parser.add_argument("i_pass", help="Influxdb password")
+    parser.add_argument("i_host", help="Influxdb hostname")
+    parser.add_argument("i_db", help="Influxdb database")
+    parser.add_argument("-p", "--port", default='8086',
+                        help='Port for influxdb access (default=8086)')
+    parser.add_argument("-c", "--carrier", default='telus_wireline',
+                        help='Carrier to query from (default=telus_wireline)',
+                        choices=get_carriers().keys())
+    parser.add_argument("-a", "--http_user_agent", default=DEFAULT_USER_AGENT,
+                        help="Defaults to '{}'".format(DEFAULT_USER_AGENT))
+    parser.add_argument("-v", "--verbose", action="store_true", default=False)
+
+    parser.set_defaults(func=output_influxdb)
 
 
 def add_zabbix_command(subparsers):
     # Arguments for zabbix output
 
-    zabbix_parser = subparsers.add_parser("zabbix", help="all output will be sent to a Zabbix server")
-    zabbix_parser.add_argument("username", help="Username for account access")
-    zabbix_parser.add_argument("password", help="Carrier password for account access")
-    zabbix_parser.add_argument("-i", "--item", default='data_usage',
+    parser = subparsers.add_parser("zabbix", help="all output will be sent to a Zabbix server")
+    parser.add_argument("username", help="Username for account access")
+    parser.add_argument("password", help="Carrier password for account access")
+    parser.add_argument("-i", "--item", default='data_usage',
                                help='Item to request (default=data_usage)',
                                choices=get_carrier_items().keys())
-    zabbix_parser.add_argument("-c", "--carrier", default='telus_wireline',
+    parser.add_argument("-c", "--carrier", default='telus_wirel    ine',
                              help='Carrier to query from (default=telus_wireline)',
                              choices=get_carriers().keys())
 #    parser.add_argument("-t", "--cache_time", default=0,
 #                       type=int, help='Seconds to keep data cached (default=0)')
-    zabbix_parser.add_argument("-a", "--http_user_agent", default=DEFAULT_USER_AGENT,
+    parser.add_argument("-a", "--http_user_agent", default=DEFAULT_USER_AGENT,
                             help="Defaults to '{}'".format(DEFAULT_USER_AGENT))
-    zabbix_parser.add_argument("-v", "--verbose", action="store_true", default=False)
+    parser.add_argument("-v", "--verbose", action="store_true", default=False)
 
-    zabbix_parser.set_defaults(func=output_zabbix)
+    parser.set_defaults(func=output_zabbix)
 
 
 def add_term_command(subparsers):
     # Arguments for terminal-only output
 
-    term_parser = subparsers.add_parser("term", help="all output will echo in a terminal")
-    #term_parser.add_argument("-i", "--item", default='data_usage',
+    parser = subparsers.add_parser("term", help="all output will echo in a terminal")
+    # term_parser.add_argument("-i", "--item", default='data_usage',
     #                         help='Item to request (default=data_usage)',
     #                         choices=get_carrier_items().keys())
-    term_parser.add_argument("username", help="Username for account access")
-    term_parser.add_argument("-p", "--password", default=None,
+    parser.add_argument("username", help="Username for account access")
+    parser.add_argument("-p", "--password", default=None,
                              help="Carrier password for account access \
                              (will prompt if not specified)")
 #    parser.add_argument("-t", "--cache_time", default=0,
 #                       type=int, help='Seconds to keep data cached (default=0)')
-    term_parser.add_argument("-c", "--carrier", default='telus_wireline',
+    parser.add_argument("-c", "--carrier", default='telus_wireline',
                              help='Carrier to query from (default=telus_wireline)',
                              choices=get_carriers().keys())
-
-    term_parser.add_argument("-a", "--http_user_agent", default=DEFAULT_USER_AGENT,
+    parser.add_argument("-a", "--http_user_agent", default=DEFAULT_USER_AGENT,
                             help="Defaults to '{}'".format(DEFAULT_USER_AGENT))
-    term_parser.add_argument("-v", "--verbose", action="store_true", default=False)
+    parser.add_argument("-v", "--verbose", action="store_true", default=False)
 
-    term_parser.set_defaults(func=output_term)
+    parser.set_defaults(func=output_term)
+
+
+def output_influxdb(args):
+    assert(isinstance(args, argparse.Namespace))
+
+    logger = logging.getLogger(__name__)
+    setup_logging(args.verbose)
+    logger.debug("Using influxdb output")
+
+    db = influxdb.InfluxDBClient(args.i_host, args.port, args.i_user, args.i_pass, args.i_db)
+
+    s = scraper_get(args.carrier, args.username, args.password, args.http_user_agent, logger)
+    scraper_run(s, logger)
+
+    json_body = [
+        {
+         "fields":  {
+            "usage": s.__dict__["_data_usage"],
+            "plan_total" : s.__dict__["_data_plan_total"],
+            "plan_name" : s.__dict__["_plan"]
+          },
+            "measurement": s.name + "_usage",
+            'tags': {
+             "carrier": s.name,
+            }
+        }
+    ]
+
+    db.write_points(json_body)
 
 
 def output_zabbix(args):
@@ -125,16 +184,23 @@ def output_zabbix(args):
     setup_logging(args.verbose)
     logger.debug("Using zabbix output")
 
-    scraper = scraper_get(args.carrier, args.username, args.password, args.http_user_agent, logger)
-    scraper_run(scraper, logger)
+    s = scraper_get(args.carrier, args.username, args.password, args.http_user_agent, logger)
+    scraper_run(s, logger)
 
     # Only print selected item
     sel_item = args.item
     obj_var = get_carrier_items()[sel_item]
 
-    print scraper.__dict__[obj_var]
+    print s.__dict__[obj_var]
+
 
 def output_term(args):
+    """
+
+    :param args: arguments from argparse parser
+
+    Prints a scraper's full list of variables pulled
+    """
     # Outputting to terminal selected
 
     assert(isinstance(args, argparse.Namespace))
@@ -156,10 +222,12 @@ def output_term(args):
     scraper_run(scraper, logger)
     scraper.print_all()
 
+    return 0
+
 
 def scraper_get(carrier, username, password, http_user_agent, logger):
     try:
-        # Get scraping object - {dict}[item] = Object(args)
+        # Get scraping object - {dict}[item](args) = Object(args)
         scraper = get_carriers()[carrier](username, password, http_user_agent)
         logger.debug("Using object {}".format(type(scraper)))
 
@@ -177,6 +245,7 @@ def scraper_run(scraper, logger):
         logger.error("Failed to run scrapper", exc_info=True)
         sys.exit('An unknown error has occurred: {}'.format(str(e)))
 
+
 class CarrierUsageScraper(object):
     """
     This class should only be inherited by another class.
@@ -189,6 +258,7 @@ class CarrierUsageScraper(object):
     url_login = login script that handles the POST authentication and cookies
     url_data = web page that presents the data to parse (post-login)
 
+    A _parse method is required to be created at the minimum
 
     """
     def __init__(self, name,
