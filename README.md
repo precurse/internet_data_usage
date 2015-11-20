@@ -29,18 +29,20 @@ Command Line Usage
 ------
 
         $ ./internet_data_usage.py -h
-        usage: internet_data_usage.py [-h] {term,zabbix} ...
+        usage: internet_data_usage.py [-h] {term,zabbix,influxdb} ...
 
         internet_data_usage 0.2-HEAD Copyright (c) 2015 Andrew Klaus
         (andrewklaus@gmail.com)
 
         optional arguments:
-          -h, --help     show this help message and exit
+          -h, --help            show this help message and exit
 
         subcommands:
-          {term,zabbix}  valid subcommands
-            term         all output will echo in a terminal
-            zabbix       all output will be sent to a Zabbix server
+          {term,zabbix,influxdb}
+                                valid subcommands
+            term                all output will echo in a terminal
+            zabbix              all output will be sent to a Zabbix server
+            influxdb            all output will be sent to an influxdb database
 
 
 Terminal Usage
@@ -70,21 +72,41 @@ Terminal Usage
 Zabbix/Monitoring Usage
 ------
 
-        $ ./internet_data_usage.py  -h
-        usage: internet_data_usage.py [-h] {term,zabbix,influxdb} ...
+        $ ./internet_data_usage.py zabbix -h
+        usage: internet_data_usage.py zabbix [-h]
+                                             [-i {data_usage,data_use_unit,data_plan_total,plan}]
+                                             [-c {telus_wireline,koodo_mobile}]
+                                             [-a HTTP_USER_AGENT] [-v]
+                                             username password
 
-        internet_data_usage 0.2-HEAD Copyright (c) 2015 Andrew Klaus
-        (andrewklaus@gmail.com)
+        positional arguments:
+          username              Username for account access
+          password              Carrier password for account access
 
         optional arguments:
           -h, --help            show this help message and exit
+          -i {data_usage,data_use_unit,data_plan_total,plan}, --item {data_usage,data_use_unit,data_plan_total,plan}
+                                Item to request (default=data_usage)
+          -c {telus_wireline,koodo_mobile}, --carrier {telus_wireline,koodo_mobile}
+                                Carrier to query from (default=telus_wireline)
+          -a HTTP_USER_AGENT, --http_user_agent HTTP_USER_AGENT
+                                Defaults to 'Mozilla/5.0 (X11; Linux x86_64)'
+          -v, --verbose
+./internet_data_usage.py  -h
+usage: internet_data_usage.py [-h] {term,zabbix,influxdb} ...
 
-        subcommands:
-          {term,zabbix,influxdb}
-                                valid subcommands
-            term                all output will echo in a terminal
-            zabbix              all output will be sent to a Zabbix server
-            influxdb            all output will be sent to an influxdb database
+internet_data_usage 0.2-HEAD Copyright (c) 2015 Andrew Klaus
+(andrewklaus@gmail.com)
+
+optional arguments:
+  -h, --help            show this help message and exit
+
+subcommands:
+  {term,zabbix,influxdb}
+                        valid subcommands
+    term                all output will echo in a terminal
+    zabbix              all output will be sent to a Zabbix server
+    influxdb            all output will be sent to an influxdb database
 
 
 Influxdb Usage

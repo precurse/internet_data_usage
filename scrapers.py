@@ -3,6 +3,9 @@ import re
 import requests
 from bs4 import BeautifulSoup
 import sys
+import json
+import urllib2
+from decimal import *
 
 
 class CarrierUsageScraper(object):
@@ -36,11 +39,81 @@ class CarrierUsageScraper(object):
 
         self.url_login = url_login
         self.url_data = url_data
+        self.s = None   # Session manager
+        self._logged_in = False
 
-        self._data_usage = None
-        self._plan = None
-        self._data_usage_unit = None
+        # scraped data
+        self.data_unit = None
+
+        # Propertied variables
+        self._plan_title = None
         self._data_plan_total = None
+        self._data_usage_total = None
+        self._data_plan_days_left = None
+
+        # Extended / In-detail stats
+        self.extended_stats = True
+        self._data_usage_down = None
+        self._data_usage_up = None
+
+    @property
+    def plan_title(self):
+        return self._plan_title
+
+    @property
+    def data_plan_total(self):
+        return self._data_plan_total
+
+    @property
+    def data_plan_days_left(self):
+        return self._data_plan_days_left
+
+    @property
+    def data_usage_total(self):
+        return self._data_usage_total
+
+    @property
+    def data_usage_down(self):
+        return self._data_usage_down
+
+    @property
+    def data_usage_up(self):
+        return self._data_usage_up
+
+    @property
+    def data_usage_pct(self):
+        # (used data - total plan data)/ total plan data
+        pct = (self.data_plan_total - self.data_usage_total) / self.data_plan_total
+        return 100-pct*100
+
+    @plan_title.setter
+    def plan_title(self, v):
+        self._plan_title = v.strip()
+
+    @data_plan_total.setter
+    def data_plan_total(self, v):
+        n_v = re.sub("[^0-9]", "", v)
+        self._data_plan_total = Decimal(n_v)
+
+    @data_plan_days_left.setter
+    def data_plan_days_left(self, v):
+        n_v = re.sub("[^0-9]", "", v)
+        self._data_plan_days_left = Decimal(n_v)
+
+    @data_usage_total.setter
+    def data_usage_total(self, v):
+        n_v = re.sub("[^0-9]", "", v)
+        self._data_usage_total = Decimal(n_v)
+
+    @data_usage_down.setter
+    def data_usage_down(self, v):
+        n_v = re.sub("[^0-9\.]", "", v)
+        self._data_usage_down = Decimal(n_v)
+
+    @data_usage_up.setter
+    def data_usage_up(self, v):
+        n_v = re.sub("[^0-9\.]", "", v)
+        self._data_usage_up = Decimal(n_v)
 
     def _login(self):
         # Create web session
@@ -57,9 +130,6 @@ class CarrierUsageScraper(object):
     def get_data_usage(self):
         return self._data_usage
 
-    def get_plan(self):
-        return self._plan
-
     def _get_data_pg_html(self):
         # Returns HTML for data page
         if self._logged_in is not True:
@@ -67,6 +137,7 @@ class CarrierUsageScraper(object):
         else:
             r = self.s.get(self.url_data, headers=self.http_headers)
             page = BeautifulSoup(r.text.encode("utf8"), "lxml")
+
         return page
 
     def _parse(self, parse_page):
@@ -80,9 +151,14 @@ class CarrierUsageScraper(object):
         self._parse(page)
 
     def print_all(self):
-        print "{} Plan: {}".format(self.name, self._plan)
-        print "Usage: {}/{} {}".format(self._data_usage, self._data_plan_total, self._data_usage_unit)
-        print "Days left: {}".format(self._days_left)
+        print "{} Plan: {}".format(self.name, self.plan_title)
+        print "Usage: {}/{} {}".format(self.data_usage_total, self.data_plan_total, self.data_unit)
+        print "Days left: {}".format(self.data_plan_days_left)
+        print "Percent used: {}".format(self.data_usage_pct)
+
+        if self.extended_stats:
+            print "Download: {}".format(self.data_usage_down)
+            print "Upload: {}".format(self.data_usage_up)
 
 
 class TelusWirelineScraper(CarrierUsageScraper):
@@ -115,34 +191,26 @@ class TelusWirelineScraper(CarrierUsageScraper):
 
     def _parse(self, parse_page):
         try:
-            plan = parse_page.find(class_="usage-plan-header usage-type-header").h2.string
-            self._plan = plan.strip()
-            self._data_usage_unit = parse_page.find(class_="usage-card-info").span.string.strip()[-2:]
-            data_usage = parse_page.find(class_="used").string
-            data_plan_total = parse_page.find(class_="usage-card-info").span.string.strip()[1:-2].strip()
-            days_left = parse_page.find(class_="meters-bill-cycle").p.strong.string
+            self.plan_title = parse_page.find(class_="usage-plan-header usage-type-header").h2.string
+            self.data_unit = parse_page.find(class_="usage-card-info").span.string.strip()[-2:]
+            self.data_usage_total = parse_page.find(class_="used").string
+            self.data_plan_total = parse_page.find(class_="usage-card-info").span.string.strip()[1:-2].strip()
+            self.data_plan_days_left = parse_page.find(class_="meters-bill-cycle").p.strong.string
 
-            # Remove all non-numeric values
-            self._data_plan_total = re.sub("[^0-9]", "", data_plan_total)
-            self._data_usage = re.sub("[^0-9]", "", data_usage)
-            self._days_left = re.sub("[^0-9]", "", days_left)
+            # Get json data
+            json_url = "https://www.telus.com" + parse_page.find(class_="usage-bar-chart mobile-chart").find(class_="item visually-hidden")["data-url"]
 
-        # <div class="meters-bill-cycle" tabindex="0">
-        #   <p>
-        #     <span class="frg-icon icon-calendar" aria-hidden="true"></span>
-        #     Current cycle
-        #     October 13, 2015 - November 12, 2015
-        #     &mdash;
-        #     <strong>19 days left</strong>
-        #   </p>
-        # </div>
+            if len(json_url) > len("https://www.telus.com") and self._logged_in:
+                self.extended_stats = True
+                r = self.s.get(json_url, headers=self.http_headers)
+                self.json_data = json.loads(r.text.encode("utf8"))
+
+                self.data_usage_down = self.json_data['meters'][0]["used_download"] # used upload
+                self.data_usage_up = self.json_data['meters'][0]["used_upload"] # used upload
 
         except Exception as e:
             logging.error("Failed to parse Telus Wireline Scraper")
             sys.exit("Unable to parse: {}".format(e.message))
-
-        # Pull json data which gives better in-depth detail
-        self._json_url = "https://www.telus.com" + parse_page.find(class_="usage-bar-chart mobile-chart").find(class_="item visually-hidden")["data-url"]
 
 
 class KoodoMobileScraper(CarrierUsageScraper):
@@ -178,17 +246,11 @@ class KoodoMobileScraper(CarrierUsageScraper):
 
     def _parse(self, parse_page):
         try:
-            plan = parse_page.find(class_="usage-plan-header usage-type-header").h2.string
-            self._plan = plan.strip()
-            self._data_usage_unit = parse_page.find(class_="usage-card-info").span.string.strip()[-2:]
-            data_usage = parse_page.find(class_="used").string
-            data_plan_total = parse_page.find(class_="usage-card-info").span.string.strip()[1:-2].strip()
-            days_left = parse_page.find(class_="records-header-info").strong.string
-
-            # Remove all non-numeric values
-            self._data_plan_total = re.sub("[^0-9]", "", data_plan_total)
-            self._data_usage = re.sub("[^0-9]", "", data_usage)
-            self._days_left = re.sub("[^0-9]", "", days_left)
+            self.plan_title = parse_page.find(class_="usage-plan-header usage-type-header").h2.string
+            self.data_unit = parse_page.find(class_="usage-card-info").span.string.strip()[-2:]
+            self.data_usage_total = parse_page.find(class_="used").string
+            self.data_plan_total = parse_page.find(class_="usage-card-info").span.string.strip()[1:-2].strip()
+            self.data_plan_days_left = parse_page.find(class_="records-header-info").strong.string
 
         except Exception as e:
             logging.error("Failed to parse Koodo Mobile Scraper")

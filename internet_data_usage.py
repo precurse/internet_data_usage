@@ -71,7 +71,7 @@ def get_carrier_items():
 
 
 def get_carriers():
-    # Dictionary to map carriers to their objects to use
+    """ Returns Dictionary to map carriers to their object """
     carriers_dict = {"telus_wireline": TelusWirelineScraper,
                      "koodo_mobile": KoodoMobileScraper}
 
@@ -155,20 +155,40 @@ def output_influxdb(args):
     s = scraper_get(args.carrier, args.username, args.password, args.http_user_agent, logger)
     scraper_run(s, logger)
 
-    json_body = [
-        {
-         "fields":  {
-            "usage": s._data_usage,
-            "plan_total" : s._data_plan_total,
-            "plan_name" : s._plan,
-             "days_left": s._days_left
-          },
-            "measurement": s.name + "_usage",
-            'tags': {
-             "carrier": s.name,
+    if not s.extended_stats:
+        json_body = [
+            {
+             "fields":  {
+                 "data_usage_total": s.data_usage_total,
+                 "data_plan_total" : s.data_plan_total,
+                 "plan_title" : s.plan_title,
+                 "data_plan_days_left": s.data_plan_days_left,
+                 "data_usage_pct": s.data_usage_pct,
+              },
+                "measurement": s.name + "_usage",
+                'tags': {
+                 "carrier": s.name,
+                }
             }
-        }
-    ]
+        ]
+    else:
+        json_body = [
+            {
+             "fields":  {
+                 "data_usage_total": s.data_usage_total,
+                 "data_plan_total" : s.data_plan_total,
+                 "plan_title" : s.plan_title,
+                 "data_plan_days_left": s.data_plan_days_left,
+                 "data_usage_pct": s.data_usage_pct,
+                 "data_usage_down": s.data_usage_down,
+                 "data_usage_up": s.data_usage_up
+              },
+                "measurement": s.name + "_usage",
+                'tags': {
+                 "carrier": s.name,
+                }
+            }
+        ]
 
     db.write_points(json_body)
 
